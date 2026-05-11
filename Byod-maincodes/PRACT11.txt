@@ -1,0 +1,119 @@
+1.	Update your system:
+Bash
+sudo apt update
+2.	Install OpenJDK 8:
+Bash
+    sudo apt install openjdk-8-jdk -y
+    ```
+3.  **Verify the installation:**
+    
+```bash
+    java -version
+    ```
+    *(You should see "1.8.0" in the output.)*
+
+---
+
+## Phase 2: Installing and Configuring Hadoop
+### 1. Download Hadoop
+```bash
+wget https://downloads.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
+tar -xzvf hadoop-3.3.6.tar.gz
+sudo mv hadoop-3.3.6 /usr/local/hadoop
+2. Configure Environment Variables
+You must tell Ubuntu where the binaries are located.
+1.	Open the bash profile: nano ~/.bashrc
+2.	Paste these at the bottom:
+Bash
+    # Java & Hadoop Paths
+    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+    export HADOOP_HOME=/usr/local/hadoop
+    export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+    ```
+3.  Apply the changes: `source ~/.bashrc`
+
+### 3. Configure Hadoop Files
+You need to edit `hadoop-env.sh` to link Java:
+```bash
+nano /usr/local/hadoop/etc/hadoop/hadoop-env.sh
+Find the line export JAVA_HOME and change it to: export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+________________________________________
+Phase 3: The MapReduce Program (Practical 11)
+1. Create the Java File
+Bash
+nano WordCount.java
+Paste the Code:
+Java
+import java.io.IOException;
+import java.util.StringTokenizer;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class WordCount {
+  public static class TokenizerMapper extends Mapper<Object, Text, IntWritable>{
+    private final static IntWritable one = new IntWritable(1);
+    private Text word = new Text();
+    public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+      StringTokenizer itr = new StringTokenizer(value.toString());
+      while (itr.hasMoreTokens()) {
+        word.set(itr.nextToken());
+        context.write(word, one);
+      }
+    }
+  }
+  public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWritable> {
+    private IntWritable result = new IntWritable();
+    public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+      int sum = 0;
+      for (IntWritable val : values) { sum += val.get(); }
+      result.set(sum);
+      context.write(key, result);
+    }
+  }
+  public static void main(String[] args) throws Exception {
+    Configuration conf = new Configuration();
+    Job job = Job.getInstance(conf, "word count");
+    job.setJarByClass(WordCount.class);
+    job.setMapperClass(TokenizerMapper.class);
+    job.setReducerClass(IntSumReducer.class);
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(IntWritable.class);
+    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileOutputFormat.setOutputPath(job, new Path(args[1]));
+    System.exit(job.waitForCompletion(true) ? 0 : 1);
+  }
+}
+________________________________________
+Phase 4: Running the Program
+1. Format and Start HDFS
+Bash
+hdfs namenode -format
+start-dfs.sh
+start-yarn.sh
+2. Compile and Execute
+Bash
+# 1. Compile
+export CLASSPATH=$(hadoop classpath)
+javac -classpath $CLASSPATH -d . WordCount.java
+
+# 2. Package
+jar cf wc.jar WordCount*.class
+
+# 3. Create Input in HDFS
+hdfs dfs -mkdir -p /input
+echo "big data is big data" > test.txt
+hdfs dfs -put test.txt /input
+
+# 4. Run Job
+hadoop jar wc.jar WordCount /input /output
+3. View Output
+Bash
+hdfs dfs -cat /output/part-r-00000
+

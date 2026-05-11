@@ -1,0 +1,114 @@
+Phase 1: Prerequisite Installation (Java & Hadoop)
+1. Install Java 8
+Hadoop requires Java to run the MapReduce engine.
+Bash
+sudo apt update
+sudo apt install openjdk-8-jdk -y
+2. Download and Extract Hadoop
+Bash
+wget https://downloads.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
+tar -xzvf hadoop-3.3.6.tar.gz
+sudo mv hadoop-3.3.6 /usr/local/hadoop
+3. Set Environment Variables
+Open your bash profile: nano ~/.bashrc. Paste these at the bottom:
+Bash
+export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+export HADOOP_HOME=/usr/local/hadoop
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+Apply the changes: source ~/.bashrc
+________________________________________
+Phase 2: Configuration for Standalone Mode
+Before running a distributed application, Hadoop needs to know it is running on "localhost."
+1.	Edit hadoop-env.sh: nano /usr/local/hadoop/etc/hadoop/hadoop-env.sh Set: export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+2.	Format the Filesystem:
+Bash
+hdfs namenode -format
+3.	Start Services:
+Bash
+start-dfs.sh
+start-yarn.sh
+________________________________________
+Phase 3: Writing the Log Analysis Application
+1. Create the Java File
+Bash
+nano LogAnalysis.java
+2. The Code
+Java
+import java.io.IOException;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class LogAnalysis {
+    // MAPPER: Filters lines for INFO, WARN, ERROR
+    public static class LogMapper extends Mapper<Object, Text, IntWritable> {
+        private final static IntWritable one = new IntWritable(1);
+        private Text logType = new Text();
+
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            String line = value.toString();
+            if (line.contains("INFO")) {
+                logType.set("INFO");
+                context.write(logType, one);
+            } else if (line.contains("WARN")) {
+                logType.set("WARN");
+                context.write(logType, one);
+            } else if (line.contains("ERROR")) {
+                logType.set("ERROR");
+                context.write(logType, one);
+            }
+        }
+    }
+
+    // REDUCER: Sums the counts
+    public static class LogReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "Log Analysis");
+        job.setJarByClass(LogAnalysis.class);
+        job.setMapperClass(LogMapper.class);
+        job.setReducerClass(LogReducer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
+________________________________________
+Phase 4: Execution
+1. Create a System Log File
+Bash
+echo "2026-05-11 INFO System Boot" > mylogs.log
+echo "2026-05-11 ERROR Database Timeout" >> mylogs.log
+echo "2026-05-11 INFO User Auth Success" >> mylogs.log
+echo "2026-05-11 WARN Memory High" >> mylogs.log
+2. Upload to HDFS
+Bash
+hdfs dfs -mkdir -p /log_input
+hdfs dfs -put mylogs.log /log_input
+3. Compile and Run
+Bash
+export CLASSPATH=$(hadoop classpath)
+javac -classpath $CLASSPATH -d . LogAnalysis.java
+jar cf log.jar LogAnalysis*.class
+hadoop jar log.jar LogAnalysis /log_input /log_output
+4. Check Final Result
+Bash
+hdfs dfs -cat /log_output/part-r-00000
+

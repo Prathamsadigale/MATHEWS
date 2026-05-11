@@ -1,0 +1,81 @@
+Phase 1: Environment Setup (JDK, Scala, and Spark)
+1. Install Java 8 or 11
+Spark requires a Java environment.
+Bash
+sudo apt update
+sudo apt install openjdk-11-jdk -y
+2. Install Scala
+Since Spark is written in Scala, we need the compiler.
+Bash
+sudo apt install scala -y
+3. Install Apache Spark
+Bash
+wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz
+tar -xvf spark-3.5.0-bin-hadoop3.tgz
+sudo mv spark-3.5.0-bin-hadoop3 /usr/local/spark
+4. Configure Environment Variables
+Open your profile: nano ~/.bashrc and add these:
+Bash
+export SPARK_HOME=/usr/local/spark
+export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+Apply changes: source ~/.bashrc
+________________________________________
+Phase 2: Writing the Scala Program
+We will write a program that creates a distributed collection of numbers (RDD), filters them to find even numbers, and multiplies them.
+1. Create the File
+Bash
+nano SparkDemo.scala
+2. The Code
+Scala
+import org.apache.spark.sql.SparkSession
+
+object SparkDemo {
+  def main(args: Array[String]): Unit = {
+    // Initialize the Spark Session
+    val spark = SparkSession.builder()
+      .appName("Practical 13 Spark Demo")
+      .master("local[*]") // Use all available CPU cores
+      .getOrCreate()
+
+    // Create a simple list of numbers
+    val numbers = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
+    // Convert the list into a Distributed Dataset (RDD)
+    val distData = spark.sparkContext.parallelize(numbers)
+
+    // Filter for even numbers and multiply each by 10
+    val result = distData.filter(x => x % 2 == 0).map(x => x * 10)
+
+    // Collect the results and print
+    println("********************************")
+    println("Processed Even Numbers: ")
+    result.collect().foreach(println)
+    println("********************************")
+
+    // Stop the Spark session
+    spark.stop()
+  }
+}
+________________________________________
+Phase 3: Execution Steps
+Step 1: Compile the Scala File
+We must include the Spark libraries during compilation.
+Bash
+scalac -cp "$SPARK_HOME/jars/*" SparkDemo.scala
+Step 2: Run the Application
+We use spark-submit to execute the program. It handles the distributed resource management automatically.
+Bash
+spark-submit --class "SparkDemo" --master "local[*]" SparkDemo.scala
+________________________________________
+Phase 4: Output Verification
+Expected Result:
+Plaintext
+********************************
+Processed Even Numbers: 
+20
+40
+60
+80
+100
+********************************
+
